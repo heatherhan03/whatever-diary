@@ -432,7 +432,7 @@ document.getElementById('feedback-btn').addEventListener('click',async()=>{
   area.innerHTML=`<div class="dot-pulse"><span></span><span></span><span></span></div><span style="color:var(--t-muted);font-size:13px;margin-left:6px">피드백 생성 중...</span>`;
   try{
     const prompt=`You are a warm, encouraging English writing coach for Korean learners.\n\nKorean diary:\n"""\n${kr||'(not provided)'}\n"""\n\nEnglish diary attempt:\n"""\n${eng}\n"""\n\nGive feedback in Korean (한국어로). Be warm and encouraging. Use this structure:\n\n**✦ 잘한 점** — 1-2가지 구체적으로 칭찬\n**✦ 이렇게 고쳐보면 어떨까요?** — 2-3가지 (원문 → 개선안 형식)\n**✦ 오늘의 표현** — 일기 내용과 관련된 유용한 영어 표현 하나\n\nKeep it concise and motivating.`;
-    const resp=await fetch('https://whatever-diary.hotmsg21.workers.dev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+    const resp=await fetch('https://real-whatever-diary.vercel.app/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
     const data=await resp.json();
     const text=data.text||'';
     area.innerHTML=renderMd(text);
