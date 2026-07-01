@@ -467,7 +467,6 @@ document.getElementById('diary-text').addEventListener('input',function(){
 });
 document.getElementById('eng-text').addEventListener('input',function(){
   document.getElementById('feedback-btn').disabled=this.value.trim().length<10;
-  const fa=document.getElementById('feedback-area');fa.classList.remove('show');fa.innerHTML='';
 });
 document.getElementById('feedback-btn').addEventListener('click',async()=>{
   const eng=document.getElementById('eng-text').value.trim();
