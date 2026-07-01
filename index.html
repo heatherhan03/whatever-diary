@@ -13,6 +13,21 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCg7Iwe5QJ_5rG5GBPrUmfFDLJA4BkrJCo",
+    authDomain: "whatever-diary.firebaseapp.com",
+    projectId: "whatever-diary",
+    storageBucket: "whatever-diary.firebasestorage.app",
+    messagingSenderId: "806183354784",
+    appId: "1:806183354784:web:ccd431ee48e9bc8cce24c5"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -183,6 +198,16 @@ body{background:var(--t-bg);color:var(--t-text);font-family:'Noto Sans KR',sans-
 </style>
 </head>
 <body class="theme-sage">
+<div id="login-screen" style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--t-bg);gap:22px;padding:20px;text-align:center">
+  <div style="font-family:'Noto Serif KR',serif;font-size:30px;font-weight:700;color:var(--t-accent)">나의 일기장</div>
+  <div style="color:var(--t-muted);font-size:14px">구글 계정으로 로그인하면<br>어느 기기에서나 내 일기를 볼 수 있어요</div>
+  <button id="google-login-btn" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--t-border);border-radius:10px;padding:12px 26px;font-size:15px;font-weight:500;cursor:pointer;font-family:'Noto Sans KR',sans-serif;color:var(--t-text);box-shadow:0 1px 3px rgba(0,0,0,.08)">
+    <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.1 8.1 3l6-6C34.5 5.5 29.6 3.5 24 3.5 12.7 3.5 3.5 12.7 3.5 24S12.7 44.5 24 44.5 44.5 35.3 44.5 24c0-1.2-.1-2.4-.3-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.9 1.1 8.1 3l6-6C34.5 6.5 29.6 4.5 24 4.5c-7.8 0-14.5 4.5-17.7 10.2z"/><path fill="#4CAF50" d="M24 44.5c5.5 0 10.4-1.9 14.1-5.1l-6.5-5.3C29.6 35.7 26.9 36.5 24 36.5c-5.3 0-9.7-3.1-11.3-7.5l-6.6 5.1C9.4 40 16.1 44.5 24 44.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.5 5.3C41.6 36.1 44.5 30.6 44.5 24c0-1.2-.1-2.4-.3-3.5z"/></svg>
+    Google로 로그인
+  </button>
+  <div id="login-loading" style="color:var(--t-muted);font-size:13px;display:none">로그인 처리 중...</div>
+</div>
+<div id="app-root" style="display:none">
 <canvas id="confetti-canvas"></canvas>
 <div class="streak-toast" id="streak-toast"><i class="ti ti-confetti" aria-hidden="true"></i><span id="streak-msg"></span></div>
 
@@ -239,6 +264,7 @@ body{background:var(--t-bg);color:var(--t-text);font-family:'Noto Sans KR',sans-
   <div class="topbar">
     <div class="logo">나의 일기장</div>
     <div class="topbar-right">
+      <button class="icon-btn" id="logout-btn" aria-label="로그아웃" style="margin-right:6px"><i class="ti ti-logout" aria-hidden="true"></i></button>
       <button class="icon-btn" id="theme-btn" aria-label="테마"><i class="ti ti-palette" aria-hidden="true"></i></button>
     </div>
   </div>
@@ -302,6 +328,8 @@ body{background:var(--t-bg);color:var(--t-text);font-family:'Noto Sans KR',sans-
     <button class="btab" data-tab="list"><i class="ti ti-notebook" aria-hidden="true"></i>보기</button>
   </nav>
 </div>
+</div>
+<!-- /app-root -->
 
 <script>
 const MILESTONES=[5,10,15,20,25,30];
@@ -315,15 +343,35 @@ const hints=[
 ];
 let hintIdx=Math.floor(Math.random()*hints.length);
 
-function loadData(){
-  try{const s=localStorage.getItem('diary_v3');if(s)entries=JSON.parse(s);const t=localStorage.getItem('diary_theme');if(t)applyTheme(t,false);}catch(e){}
+let currentUser=null,currentTheme='sage';
+async function loadData(){
+  if(!currentUser)return;
+  try{
+    const doc=await db.collection('diaries').doc(currentUser.uid).get();
+    if(doc.exists){
+      const data=doc.data();
+      entries=data.entries||[];
+      if(data.theme)applyTheme(data.theme,false);
+    }else{
+      entries=[];
+    }
+  }catch(e){console.error(e);alert('일기를 불러오지 못했어요. 인터넷 연결을 확인해주세요.');}
 }
-function saveData(){try{localStorage.setItem('diary_v3',JSON.stringify(entries));}catch(e){}}
+async function saveData(){
+  if(!currentUser)return;
+  try{
+    await db.collection('diaries').doc(currentUser.uid).set({entries,theme:currentTheme},{merge:true});
+  }catch(e){
+    console.error(e);
+    alert('저장에 실패했어요. 사진/영상 용량이 너무 크면 저장이 안 될 수 있어요.');
+  }
+}
 function applyTheme(n,save=true){
+  currentTheme=n;
   document.body.className='theme-'+n;
   document.querySelectorAll('.theme-opt').forEach(o=>o.classList.toggle('selected',o.dataset.theme===n));
   document.querySelector('meta[name="theme-color"]').setAttribute('content',{sage:'#6b7c5a',lavender:'#7c6b9e',rose:'#a06a6a',sky:'#5a8aa0',sand:'#9a8060'}[n]||'#6b7c5a');
-  if(save)localStorage.setItem('diary_theme',n);
+  if(save)saveData();
 }
 function fmtDate(ts){const d=new Date(ts);const dy=['일','월','화','수','목','금','토'];return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${dy[d.getDay()]})`;}
 function fmtTime(ts){const d=new Date(ts);const h=d.getHours(),m=d.getMinutes().toString().padStart(2,'0');return `${h<12?'오전':'오후'} ${h%12||12}:${m}`;}
@@ -554,7 +602,34 @@ document.getElementById('detail-view').addEventListener('transitionend',()=>{
   if(document.getElementById('detail-view').classList.contains('open'))history.pushState(null,'',location.href);
 });
 
-loadData();updateClock();setInterval(updateClock,1000);updateStats();
+// AUTH
+firebase.auth().onAuthStateChanged(async(user)=>{
+  if(user){
+    currentUser=user;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app-root').style.display='';
+    document.getElementById('login-loading').style.display='none';
+    await loadData();
+    updateStats();
+    renderEntries();
+  }else{
+    currentUser=null;
+    document.getElementById('app-root').style.display='none';
+    document.getElementById('login-screen').style.display='flex';
+  }
+});
+document.getElementById('google-login-btn').addEventListener('click',()=>{
+  document.getElementById('login-loading').style.display='block';
+  const provider=new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider).catch(err=>{
+    document.getElementById('login-loading').style.display='none';
+    alert('로그인에 실패했어요: '+err.message);
+  });
+});
+document.getElementById('logout-btn').addEventListener('click',()=>{
+  firebase.auth().signOut();
+});
+updateClock();setInterval(updateClock,1000);
 </script>
 </body>
 </html>
